@@ -82,7 +82,7 @@ static void print_bucket(user_list_node *ul);
 //                                                             Public Functions 
 
 /******************************************************************************
- * Function:    ob_init_obsess_book
+ * Function:    ob_init
  *
  * Description: initialize the control block and surrounding data structures.
  *
@@ -93,13 +93,14 @@ static void print_bucket(user_list_node *ul);
  * Notes:       None.
  *
  *****************************************************************************/
-obsess_book_cb* ob_init_obsess_book(void)
+obsess_book_cb* ob_init(void)
 {
    obsess_book_cb *cb;
    int i;
-
+   //allocate a new cb structure
    cb = (obsess_book_cb*)malloc((int)sizeof(struct _obsess_book_cb) * sizeof(char));
    
+   //Initialize values
    if(cb != NULL)
    {
       cb->static_id = 0L;
@@ -245,7 +246,7 @@ user_ret_code ob_add_BFF(user *who, user *bff)
       if(who->BFF_list[i]->user_ID == bff->user_ID)
       {//oops already a user
          printf("err already a bff\n");
-         return USER_ALREADY_BFF;
+         return -USER_ALREADY_BFF;
       }
    }
    
