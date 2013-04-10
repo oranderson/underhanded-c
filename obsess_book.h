@@ -45,4 +45,4 @@ user*             ob_find_user(obsess_book_cb *cb,char *name);
 user_ret_code     ob_add_BFF(user *who, user *bff);
 int               DERPCON(user *x, user *y);
 void              ob_dump_data(obsess_book_cb *cb);
-obsess_book_cb*   ob_init_obsess_book(void);
+obsess_book_cb*   ob_init(void);

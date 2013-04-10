@@ -49,7 +49,7 @@ int main (int argv, char **argc)
 {
    BOOLEAN exit = FALSE;
 
-   cb = ob_init_obsess_book();
+   cb = ob_init();
    load_test_data();
 
  //  while(exit == FALSE)
