@@ -49,9 +49,7 @@ int main (int argv, char **argc)
 {
    BOOLEAN exit = FALSE;
 
-printf("<%s, %d>** %s()\n",__FILE__,__LINE__,__FUNCTION__);
-   cb = init_obsess_book();
-   printf("<%s, %d>** %s()\n",__FILE__,__LINE__,__FUNCTION__);
+   cb = ob_init_obsess_book();
    load_test_data();
 
  //  while(exit == FALSE)
@@ -75,29 +73,32 @@ int load_test_data()
    for(i = 0; i < td_size;i++)
    {
       printf("creating new user %s, %s\n",user_data_list[i].name,user_data_list[i].account_handle);
-      my_new_user = new_user(cb,user_data_list[i].name,user_data_list[i].account_handle);
+      my_new_user = ob_new_user(cb,user_data_list[i].name,user_data_list[i].account_handle);
    }
    //Populate BFFs
    srand(time(NULL));
 
    for(i = 0; i < td_size;i++)
    {
-      me = findUser(cb,user_data_list[i].name);
+      me = ob_find_user(cb,user_data_list[i].name);
       //Everyone can have from 1 to 25 BFFs.
       for(j = 0;j < (rand() % 24) + 1;j++)
       {
-         bff = findUser(cb,user_data_list[(rand() % td_size)].name);
-         add_BFF(me,bff);
+         bff = ob_find_user(cb,user_data_list[(rand() % td_size)].name);
+         ob_add_BFF(me,bff);
       }
    }
-   dump_data(cb);
+   ob_dump_data(cb);
 
    for(i = 0;i < td_size; i++)
    {
-      //me = findUser("O\'Ryan Anderson");
-      me = findUser(cb,user_data_list[rand() % td_size].name);
-      bff = findUser(cb,user_data_list[(rand() % td_size)].name);
+      me = ob_find_user(cb,"O\'Ryan Anderson");
+      ///me = ob_find_user(cb,user_data_list[rand() % td_size].name);
+      bff = ob_find_user(cb,user_data_list[(rand() % td_size)].name);
       derpcon = DERPCON(me,bff);
+      printf("derpcon of me -> bff = %d\n",derpcon);
+      derpcon = DERPCON(bff,me);
+      printf("derpcon of bff -> me = %d\n",derpcon);
    }
 
 
