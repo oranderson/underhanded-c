@@ -29,10 +29,19 @@
 
 //Filter number used to calculate the bucket hash.
 #define HASH_FILTER 6
+
+//Check the user X parameter to make sure the User X parameter is valid and it's
+//hash_value is sane.
+#define CHECK_USER_PARAM_X (!(x &&  x->scratch < BUCKET_LEN))
+
+//Check the user Y parameter to make sure the User Y parameter is valid and it's
+//hash_value is sane.
+#define CHECK_USER_PARAM_Y ((!y && y->scratch < BUCKET_LEN))
 //_____________________________________________________________________________
 //                                                                        Types
 
-//Structure to define a user.
+//Structure to define a user. Explicitly part of the contest, i would use a linked
+//list for the BFFs so as to not do so many reallocs.  Probably implement a free list.
 struct user_struct {
   int user_ID;
   char * name;
@@ -47,7 +56,7 @@ typedef struct _user_list_node
 {
    struct _user_list_node *prev;
    struct _user_list_node *next;
-   user      *data;
+   user                   *data;
 }user_list_node;
 
 struct _obsess_book_cb
@@ -69,16 +78,28 @@ struct _obsess_book_cb
 static int DERPCON_helper(user *x, user *y, int depth);
 static int generate_hash(char *name, int name_size);
 static void print_bucket(user_list_node *ul);
-static struct _obsess_book_cb ob_cb;
 //_____________________________________________________________________________
 //                                                             Public Functions 
 
-obsess_book_cb* init_obsess_book(void)
+/******************************************************************************
+ * Function:    ob_init_obsess_book
+ *
+ * Description: initialize the control block and surrounding data structures.
+ *
+ * Params:      None.
+ *
+ * Returns:     obsess_book_cb* - pointer to the Obsess book cb.
+ *
+ * Notes:       None.
+ *
+ *****************************************************************************/
+obsess_book_cb* ob_init_obsess_book(void)
 {
    obsess_book_cb *cb;
    int i;
 
-   cb = &ob_cb;
+   cb = (obsess_book_cb*)malloc((int)sizeof(struct _obsess_book_cb) * sizeof(char));
+   
    if(cb != NULL)
    {
       cb->static_id = 0L;
@@ -86,13 +107,14 @@ obsess_book_cb* init_obsess_book(void)
       {
          cb->user_list[i] = NULL;
       }
-      memset(cb->padding,0L,sizeof(long)*sizeof(cb->padding));
+      printf("clearing memory %d\n",sizeof(long)*sizeof(cb->padding));
+      memset(cb->padding,0L,sizeof(cb->padding));
    }
    return cb;
 }
 
 /******************************************************************************
- * Function:    new_user() 
+ * Function:    ob_new_user() 
  *
  * Description: Function adds a new user to the user database.
  *
@@ -105,7 +127,7 @@ obsess_book_cb* init_obsess_book(void)
  *              the user structure is returned.
  *
  *****************************************************************************/
-user* new_user(obsess_book_cb *cb,char *name, char *ah)
+user* ob_new_user(obsess_book_cb *cb,char *name, char *ah)
 {
    user *new_user = NULL;        //Pointer to the new user.
    user_list_node *user_node = NULL;   //Pointer to the user node.
@@ -123,17 +145,14 @@ user* new_user(obsess_book_cb *cb,char *name, char *ah)
    {
       goto EXIT_add_user_0;
    }
-   printf("<%s, %d>** %s() %d \n",__FILE__,__LINE__,__FUNCTION__,sizeof(struct user_struct));
    
    //Allocate a new User structure.
-   new_user = malloc(sizeof(struct user_struct));
+   new_user = (user*)malloc(sizeof(struct user_struct)*sizeof(char));
    if(new_user == NULL)
    {//NO MEM.
       goto EXIT_add_user_0;
    }
 
-printf("<%s, %d>** %s()\n",__FILE__,__LINE__,__FUNCTION__);
-   
    //Fill in name
    name_size = strlen(name);
    new_user->name = malloc(name_size+1);
@@ -145,7 +164,6 @@ printf("<%s, %d>** %s()\n",__FILE__,__LINE__,__FUNCTION__);
    strncpy(new_user->name,name,name_size);
    new_user->name[name_size] = '\0';
    
-   printf("<%s, %d>** %s()\n",__FILE__,__LINE__,__FUNCTION__);
    //Fill in Account Handle
    ah_size = strlen(ah);
    new_user->account_handle = malloc(ah_size);
@@ -170,10 +188,8 @@ printf("<%s, %d>** %s()\n",__FILE__,__LINE__,__FUNCTION__);
    //initialize scratch
    new_user->scratch = hash_val;
    
-   printf("<%s, %d>** %s()\n",__FILE__,__LINE__,__FUNCTION__);
    //Put it in a bucket and make it unique.
    user_node = malloc(sizeof(cb->user_list));
-   printf("<%s, %d>** %s()\n",__FILE__,__LINE__,__FUNCTION__);
    user_node->data = new_user;
 
    printf("inserting new user %s into %d\n",new_user->name,hash_val);
@@ -191,7 +207,6 @@ printf("<%s, %d>** %s()\n",__FILE__,__LINE__,__FUNCTION__);
    //Set the user data in the node.
    cb->user_list[hash_val] = user_node;
 
-
    //jump over the error processing code and 
    //return a pointer to the new user.
    goto EXIT_add_user_0;
@@ -205,10 +220,8 @@ EXIT_add_user_0:
    return new_user;
 }
 
-
-
 /******************************************************************************
- * Function:      add_BFF
+ * Function:      ob_add_BFF
  *
  * Description:   add BFF to the user's list of BFFs
  *
@@ -218,10 +231,11 @@ EXIT_add_user_0:
  * Returns:       user_ret_code USER_SUCCESS - bff added
  *                              USER_ALREADY_BFF - bff already a bff.
  *
- * Notes:         None.
+ * Notes:         Uses realloc as the BFF list was specificed by the Contest,
+ *                I would use a linked list with a free list.
  *
  *****************************************************************************/
-user_ret_code add_BFF(user *who, user *bff)
+user_ret_code ob_add_BFF(user *who, user *bff)
 {
    int i;
    
@@ -245,18 +259,19 @@ user_ret_code add_BFF(user *who, user *bff)
 }
 
 /******************************************************************************
- * Function: 
+ * Function:      ob_find_user
  *
- * Description:
+ * Description:   Function finds a user specified by the name.
  *
- * Params:
+ * Params:        obsess_book_cb* - pointer to the obsess_book control block.
+ *                char *name - pointer to the name you are looking for.
  *
- * Returns:
+ * Returns:       user* - pointer to the user structure.
  *
- * Notes:
+ * Notes:         None.
  *
  *****************************************************************************/
-user* findUser(obsess_book_cb *cb,char *name)
+user* ob_find_user(obsess_book_cb *cb,char *name)
 {
    int hashVal = generate_hash(name,strlen(name));
    user_list_node *ul;
@@ -289,19 +304,20 @@ user* findUser(obsess_book_cb *cb,char *name)
  * Returns:       0-6 the DERPCON value of the BFFs or
  *                >0  Error.
  *
- * Notes:         None.
+ * Notes:         Small change to contest rules, i defined this with pointers to
+ *                the structures instead of passing the structures though the stack.
  *
  *****************************************************************************/
 int DERPCON(user *x, user *y)
 {
    int derpcon_ret;
    //check the parameters.
-   if (x->scratch > BUCKET_LEN)
+   if (CHECK_USER_PARAM_X)
    {
       return -USER_INVALID_X;
    }
 
-   if (y->scratch > BUCKET_LEN)
+   if (CHECK_USER_PARAM_Y)
    {
       return -USER_INVALID_Y;
    }
@@ -313,23 +329,23 @@ int DERPCON(user *x, user *y)
 }
 
 /******************************************************************************
- * Function: 
+ * Function:      ob_dump_data()
  *
- * Description:
+ * Description:   Debug function to dump the data structures in Obsess book.
  *
- * Params:
+ * Params:        obsess_book_cb *cb - pointer to the obsess book control block.
  *
- * Returns:
+ * Returns:       None.
  *
- * Notes:
+ * Notes:         Outputs to stdout.
  *
  *****************************************************************************/
-void dump_data(obsess_book_cb *cb)
+void ob_dump_data(obsess_book_cb *cb)
 {
    int i;
 
    printf("-- Dumping Data --\n");
-   for(i = 0; i < BUCKET_LEN + 2;i++)
+   for(i = 0; i < BUCKET_LEN;i++)
    {
       user_list_node *ul = cb->user_list[i];
       printf("\n***********************************\n");
@@ -359,8 +375,9 @@ void dump_data(obsess_book_cb *cb)
  *                    -1    not a common friend.
  *
  * Notes:         Algorithm:
- *                Want to return the lowest possible DERPCON.  User recursion to 
- *                Search the friends of x.
+ *                Want to return the lowest possible DERPCON.  Use recursion to 
+ *                Search the friends of x or reuturn the max depth if not found
+ *                or return the current depth if the user is in the BFF list.
  *
  *****************************************************************************/
 int DERPCON_helper(user *x, user *y, int depth)
@@ -413,7 +430,7 @@ int DERPCON_helper(user *x, user *y, int depth)
  *
  * Returns:       int - the hash value generated.
  *
- * Notes:
+ * Notes:         Hash values are not unique per user.
  *
  *****************************************************************************/
 int generate_hash(char *name, int name_size)
@@ -429,7 +446,8 @@ int generate_hash(char *name, int name_size)
    }
 
    //Hash function will put each name into a bucket for easy searching.
-   //Each bucket will be a list of users.
+   //Each bucket will be a list of users.  Hash function designed to give a 
+   //large distrabution of hash values.
    hash_val = ((id * HASH_FILTER % BUCKET_LEN) * HASH_PRIME) / HASH_FILTER;
    
    //incase any are out of bounds (should never happen)
@@ -442,6 +460,18 @@ int generate_hash(char *name, int name_size)
    return hash_val;
 }
 
+/******************************************************************************
+ * Function:      print_bucket() 
+ *
+ * Description:   Print all the users in the bucket.
+ *
+ * Params:        user_list_node *ul-pointer to the node of the users to print.
+ *
+ * Returns:       None.
+ *
+ * Notes:         outputs to stdout.
+ *
+ *****************************************************************************/
 void print_bucket(user_list_node *ul)
 {
    int i;
