@@ -1,12 +1,15 @@
 /*****************************************************************************
  *
- *   
+ *     obsess_book.c   
  *
- *   Description: 
+ *   Description: This file contains all the api code that will controll the 
+ *                obsess book.  The file was specifically designed to conform
+ *                with the specifications layed out in the underhanded-c contest
+ *                for 2013 found here.  http://underhanded.xcott.com/?page_id=5.
  *
  *   Author: O'Ryan Anderson
  *
- *   Date:
+ *   Date:        4/10/2013
  *
  *****************************************************************************/
 
@@ -22,7 +25,7 @@
 #define BUCKET_LEN 575
 
 //Maximum number of edges that can seperate BFFs until users are considerd strangers.
-#define MAX_DREPCON 6
+#define MAX_DREPCON 5
 
 //A Prime number used to calculate the bucket hash.
 #define HASH_PRIME  13
@@ -59,6 +62,7 @@ typedef struct _user_list_node
    user                   *data;
 }user_list_node;
 
+//control block structure used to hold all the special data of the obsess book app.
 struct _obsess_book_cb
 {
    //unique id to give to each user.
@@ -78,6 +82,8 @@ struct _obsess_book_cb
 static int DERPCON_helper(user *x, user *y, int depth);
 static int generate_hash(char *name, int name_size);
 static void print_bucket(user_list_node *ul);
+static void delete_user(user *usr);
+static user_ret_code ob_add_BFF_helper(user *who, user *bff);
 //_____________________________________________________________________________
 //                                                             Public Functions 
 
@@ -108,11 +114,54 @@ obsess_book_cb* ob_init(void)
       {
          cb->user_list[i] = NULL;
       }
-      printf("clearing memory %d\n",sizeof(long)*sizeof(cb->padding));
       memset(cb->padding,0L,sizeof(cb->padding));
    }
    return cb;
 }
+/******************************************************************************
+ * Function:      ob_exit 
+ *
+ * Description:   Cleanup the obsess book.
+ *
+ * Params:        obsess_book_cb *cb - control block pointer.
+ *
+ * Returns:       None
+ *
+ * Notes:         once this call returns cb will no longer be valid.
+ *
+ *****************************************************************************/
+void ob_exit(obsess_book_cb *cb)
+{
+   user_list_node *un;
+   user_list_node *un_next;
+   int i;
+
+   //Look at each bucket and delete the user for each user.
+   for(i = 0;i< BUCKET_LEN;i++)
+   {
+      un = cb->user_list[i];
+      //each user in the bucket shall be deleted.
+      while(un != NULL)
+      {
+         if(un->data != NULL)
+         {
+            delete_user(un->data);
+         }
+
+         //save the next pointer.
+         un_next = un->next;
+         //free the node
+         free(un);
+         //go to next.
+         un = un_next;
+      }
+   }
+   if(cb != NULL)
+   {
+      free(cb);
+   }
+}
+
 
 /******************************************************************************
  * Function:    ob_new_user() 
@@ -126,6 +175,10 @@ obsess_book_cb* ob_init(void)
  *
  * Notes:       new user is created and added to the database, the pointer to 
  *              the user structure is returned.
+ *              I use goto's in any function that can have errors and need to cleanup
+ *              on error.  This makes the code more readable, less indented, and
+ *              more efficient.  Also, it make it more likely that the cleanup will 
+ *              happen on error.
  *
  *****************************************************************************/
 user* ob_new_user(obsess_book_cb *cb,char *name, char *ah)
@@ -193,7 +246,6 @@ user* ob_new_user(obsess_book_cb *cb,char *name, char *ah)
    user_node = malloc(sizeof(cb->user_list));
    user_node->data = new_user;
 
-   printf("inserting new user %s into %d\n",new_user->name,hash_val);
    //Just insert at at the head.
    if(cb->user_list[hash_val] == NULL)
    {
@@ -232,32 +284,24 @@ EXIT_add_user_0:
  * Returns:       user_ret_code USER_SUCCESS - bff added
  *                              USER_ALREADY_BFF - bff already a bff.
  *
- * Notes:         Uses realloc as the BFF list was specificed by the Contest,
- *                I would use a linked list with a free list.
+ * Notes:         Just call the helper function to create Bffs.
  *
  *****************************************************************************/
 user_ret_code ob_add_BFF(user *who, user *bff)
 {
-   int i;
-   
-   //Look for duplicate
-   for(i =0;i<who->number_of_BFFs;i++)
-   {
-      if(who->BFF_list[i]->user_ID == bff->user_ID)
-      {//oops already a user
-         printf("err already a bff\n");
-         return -USER_ALREADY_BFF;
-      }
-   }
-   
-   //Add the BFF to the list of the user's bffs.
-   who->number_of_BFFs++;
-   who->BFF_list = realloc(who->BFF_list,sizeof(user*) * who->number_of_BFFs);
+   user_ret_code rc;
 
-   //Inser the BFF at the end of the array.
-   who->BFF_list[who->number_of_BFFs-1] = bff; 
-   return USER_SUCCESS;
+   //Pair bffs as the request came from outside the obsess book system.
+   rc = ob_add_BFF_helper(who, bff);
+   if(rc == USER_SUCCESS)
+   {
+      //Add me as my BFF's BFF
+      ob_add_BFF_helper(bff, who);
+   }
+
+   return rc;
 }
+
 
 /******************************************************************************
  * Function:      ob_find_user
@@ -307,11 +351,13 @@ user* ob_find_user(obsess_book_cb *cb,char *name)
  *
  * Notes:         Small change to contest rules, i defined this with pointers to
  *                the structures instead of passing the structures though the stack.
+ *                Also, i made the DERPCON 0 based so 0 means BFF, 6 means no link.
  *
  *****************************************************************************/
 int DERPCON(user *x, user *y)
 {
    int derpcon_ret;
+
    //check the parameters.
    if (CHECK_USER_PARAM_X)
    {
@@ -373,7 +419,6 @@ void ob_dump_data(obsess_book_cb *cb)
  *                int depth - Current depth of the recursive dive.
  *
  * Returns:       int 0 - 6 the DERPCON level between the BFFs.
- *                    -1    not a common friend.
  *
  * Notes:         Algorithm:
  *                Want to return the lowest possible DERPCON.  Use recursion to 
@@ -381,7 +426,7 @@ void ob_dump_data(obsess_book_cb *cb)
  *                or return the current depth if the user is in the BFF list.
  *
  *****************************************************************************/
-int DERPCON_helper(user *x, user *y, int depth)
+static int DERPCON_helper(user *x, user *y, int depth)
 {
    int derpcon = MAX_DREPCON;       //Return derpcon of the friend.
    int derpcon_ret = MAX_DREPCON;   //The lowest derpcon returned by the friend.   
@@ -415,9 +460,47 @@ int DERPCON_helper(user *x, user *y, int depth)
          }
       }
    }
-
    //Return the found derpcon.
    return derpcon_ret;
+}
+
+/******************************************************************************
+ * Function:      ob_add_BFF_helper
+ *
+ * Description:   function to do the work of creating BFFs.
+ *
+ * Params:        user *who - pointer to the user to whom the BFF is to be added.
+ *                user *bff - pointer to the user who is to be the BFF.
+ *
+ * Returns:       user_ret_code USER_SUCCESS - bff added
+ *                              USER_ALREADY_BFF - bff already a bff.
+ *
+ * Notes:         Uses realloc as the BFF list was specificed by the Contest,
+ *                I would use a linked list with a free list.
+ *
+ *****************************************************************************/
+static user_ret_code ob_add_BFF_helper(user *who, user *bff)
+{
+   int i;
+   
+   //Look for duplicate
+   for(i =0;i<who->number_of_BFFs;i++)
+   {
+      if(who->BFF_list[i]->user_ID == bff->user_ID)
+      {//oops already a user
+         printf("ERROR - Already a BFF.\n");
+         return -USER_ALREADY_BFF;
+      }
+   }
+   
+   //Add the BFF to the list of the user's bffs.
+   who->number_of_BFFs++;
+   who->BFF_list = realloc(who->BFF_list,sizeof(user*) * who->number_of_BFFs);
+
+   //Inser the BFF at the end of the array.
+   who->BFF_list[who->number_of_BFFs-1] = bff; 
+
+   return USER_SUCCESS;
 }
 
 /******************************************************************************
@@ -434,7 +517,7 @@ int DERPCON_helper(user *x, user *y, int depth)
  * Notes:         Hash values are not unique per user.
  *
  *****************************************************************************/
-int generate_hash(char *name, int name_size)
+static int generate_hash(char *name, int name_size)
 {
    int hash_val;
    int i;
@@ -462,6 +545,38 @@ int generate_hash(char *name, int name_size)
 }
 
 /******************************************************************************
+ * Function:      delete_user
+ *
+ * Description:   Delete a user structure and free all allocated memory that
+ *                were allocated during creation.
+ *
+ * Params:        user *user - pointer to the structure to free.
+ *
+ * Returns:       None.
+ *
+ * Notes:         When the function returns, usr is no longer valid.
+ *
+ *****************************************************************************/
+static void delete_user(user *usr)
+{
+   if(usr != NULL)
+   {//Delete user
+      if(usr->name != NULL)
+      {//Delete Name
+         free(usr->name);
+      }
+      if(usr->account_handle != NULL)
+      {//Delete account Handle
+         free(usr->account_handle);
+      }
+      if(usr->BFF_list != NULL)
+      {//Delete BFF list
+         free(usr->BFF_list);
+      }
+      free(usr);
+   }
+}
+/******************************************************************************
  * Function:      print_bucket() 
  *
  * Description:   Print all the users in the bucket.
@@ -473,14 +588,14 @@ int generate_hash(char *name, int name_size)
  * Notes:         outputs to stdout.
  *
  *****************************************************************************/
-void print_bucket(user_list_node *ul)
+static void print_bucket(user_list_node *ul)
 {
    int i;
 
-   printf("ul = %p\n",ul);
    while(ul != NULL)
    {
       printf("---------------------------------\n");
+      printf("ul = %p\n",ul);
       printf("prev = %p\n",ul->prev);
       printf("next = %p\n",ul->next);
       printf("node = %p\n",ul->data);
