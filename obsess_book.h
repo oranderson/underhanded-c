@@ -1,13 +1,13 @@
 
 /*****************************************************************************
  *
- *   
+ *       obsess_book.h 
  *
- *   Description: 
+ *   Description: Header file for the obsess_book.
  *
  *   Author: O'Ryan Anderson
  *
- *   Date:
+ *   Date:   4/10/2013
  *
  *****************************************************************************/
 
@@ -19,6 +19,7 @@
 //                                                                        Types
 //Forward declaration of obsess_book_cb;
 typedef struct _obsess_book_cb obsess_book_cb;
+
 //Forward declaration of user structure type.
 typedef struct user_struct user;
 
@@ -46,3 +47,4 @@ user_ret_code     ob_add_BFF(user *who, user *bff);
 int               DERPCON(user *x, user *y);
 void              ob_dump_data(obsess_book_cb *cb);
 obsess_book_cb*   ob_init(void);
+void              ob_exit(obsess_book_cb *cb);
